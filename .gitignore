@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pt
+*.onnx
+*.log
+.venv/
+.env
+data/
