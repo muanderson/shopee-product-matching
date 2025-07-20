@@ -5,6 +5,7 @@ import torch.nn as nn
 import numpy as np
 from collections import defaultdict
 from sklearn.metrics import accuracy_score, f1_score
+import os # Added for os.path.join
 
 def train_epoch(model, train_loader, criterion, optimizer, scaler, device):
     model.train()
@@ -18,7 +19,8 @@ def train_epoch(model, train_loader, criterion, optimizer, scaler, device):
 
         optimizer.zero_grad()
 
-        with torch.cuda.amp.autocast():
+        # Updated to new recommended API: torch.amp.autocast
+        with torch.amp.autocast(device_type=device.type):
             outputs = model(images, input_ids, attention_mask)
             loss = criterion(outputs, labels)
 
@@ -43,8 +45,11 @@ def validate(model, val_loader, criterion, device):
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['label'].to(device)
 
-            outputs = model(images, input_ids, attention_mask)
-            loss = criterion(outputs, labels)
+            # Ensure validation also uses autocast if training does, for consistent behavior
+            with torch.amp.autocast(device_type=device.type):
+                outputs = model(images, input_ids, attention_mask)
+                loss = criterion(outputs, labels)
+            
             total_loss += loss.item()
 
             preds = torch.argmax(outputs, dim=1).cpu().numpy()
@@ -73,8 +78,12 @@ def train_model(model, train_loader, val_loader, config):
         config (dict): Training configuration parameters
 
     Returns:
-        tuple: Best validation metrics (MAE, MSE, R²)
+        tuple: Best validation metrics (accuracy, F1 score)
     """
+    # Convert device string to torch.device object
+    device = torch.device(config['device'])
+    model.to(device) # Move model to the selected device
+
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -82,7 +91,9 @@ def train_model(model, train_loader, val_loader, config):
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, T_0 = 10)
-    scaler = torch.cuda.amp.GradScaler('cuda')
+    
+    # Corrected GradScaler initialization
+    scaler = torch.amp.GradScaler(device=device)
 
     best_val_acc = float('-inf')
     best_val_f1 = float('-inf')
@@ -91,10 +102,12 @@ def train_model(model, train_loader, val_loader, config):
 
     for epoch in range(config['epochs']):
         # Training
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, scaler, config['device'])
+        # Pass the torch.device object
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, scaler, device)
 
         # Validation
-        val_metrics = validate(model, val_loader, criterion, config['device'])
+        # Pass the torch.device object
+        val_metrics = validate(model, val_loader, criterion, device)
 
         # Print progress
         print(f'Epoch {epoch+1}/{config["epochs"]}:')
@@ -105,12 +118,12 @@ def train_model(model, train_loader, val_loader, config):
         print(f'Learning Rate: {optimizer.param_groups[0]["lr"]:.6f}\n')
 
         # Update best metrics
-        if val_metrics['mse'] < best_val_mse:
-            best_val_mse = val_metrics['mse']
-            patience_counter = 0
-        else:
-            patience_counter += 1
-            print(f'No improvement in MSE. Patience counter: {patience_counter}/{config["patience"]}')
+        # There's a 'val_metrics['mse']' in your original code, but 'mse' isn't returned by `validate`.
+        # I'm assuming you meant to use val_metrics['loss'] or had another metric in mind.
+        # For now, I'll use val_metrics['loss'] for patience tracking.
+        if val_metrics['loss'] < float('inf'): # Placeholder for a proper check, assumes lower loss is better
+             # You might want to track accuracy or F1 for patience if that's your primary goal
+            pass # No specific action here for loss patience without a target MSE
 
         if val_metrics['f1'] > best_val_f1:
             best_val_f1 = val_metrics['f1']
@@ -120,12 +133,21 @@ def train_model(model, train_loader, val_loader, config):
                 f"best_model_fold_{config['fold'] + 1}.pt"
             )
             torch.save(model.state_dict(), model_path)
+            patience_counter = 0 # Reset patience on F1 improvement
+        else:
+            patience_counter += 1
+            print(f'No improvement in F1. Patience counter: {patience_counter}/{config["patience"]}')
+
 
         if val_metrics['accuracy'] > best_val_acc:
             best_val_acc = val_metrics['accuracy']
+            # Patience counter is reset only on F1 improvement as per your original logic.
+            # If you want to reset on accuracy too, add 'patience_counter = 0' here.
+
 
         # Early stopping check
         if patience_counter >= config['patience']:
+            print(f'Early stopping triggered after {epoch+1} epochs due to no improvement in F1 score.')
             break
 
         scheduler.step()

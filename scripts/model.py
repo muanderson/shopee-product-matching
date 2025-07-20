@@ -32,7 +32,8 @@ class Shopeetransformer(nn.Module):
         # ViT feature extraction
         vit_outputs = self.image_encoder(image)
         # Use CLS token embedding (first token)
-        image_feat = vit_outputs.last_hidden_state[:, 0]
+        # The output of vit_b_16 with heads=nn.Identity() is directly the feature vector
+        image_feat = vit_outputs
         image_feat = self.image_proj(image_feat)
 
         # BERT feature extraction
