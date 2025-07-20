@@ -10,7 +10,7 @@ from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
-from data_loader import Shopeedataset, get_transforms
+from data_loader import ShopeeDataset, get_transforms
 from model import Shopeetransformer
 from engine import train_model
 
@@ -50,12 +50,9 @@ def main():
         'batch_size': 32,
         'learning_rate': 0.001,
         'min_lr': 1e-6,
-        'weight_decay': weight_decay,
-        't0': t0,
-        't_mult': t_mult,
         'epochs': 100,
-        'patience': 100,
-        'device': torch.device(cuda:0 if torch.cuda.is_available() else "cpu"),
+        'patience': 10,
+        'device': torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
         'n_splits': 5,
     }
 
@@ -107,12 +104,12 @@ def main():
         val_data = product_clean.iloc[val_idx].reset_index(drop=True)
 
         # Create datasets and dataloaders
-        train_dataset = Shopeedataset(
+        train_dataset = ShopeeDataset(
             train_data,
             transform=get_transforms(config['image_size'], is_training=True)
         )
 
-        val_dataset = Shopeedataset(
+        val_dataset = ShopeeDataset(
             val_data,
             transform=get_transforms(config['image_size'], is_training=False)
         )
@@ -132,11 +129,13 @@ def main():
         )
 
         # Initialize and train model
-        model = Shopeetransformer.to(config['device'])
-        best_mae, best_mse, best_r2 = train_model(model, train_loader, val_loader, config)
+        model = Shopeetransformer()
+        model = model.to(config['device'])
+        
+        best_acc, best_f1 = train_model(model, train_loader, val_loader, config)
 
-        print(f'Fold {fold + 1}, Best MAE: {best_mae:.4f}, Best MSE: {best_mse:.4f}, Best R²: {best_r2:.4f}')
-        fold_results.append((best_mae, best_mse, best_r2))
+        print(f'Fold {fold + 1}, Best Accuracy: {best_acc:.4f}, Best F1: {best_f1:.4f}')
+        fold_results.append((best_acc, best_f1))
 
     # Print cross-validation results
     if fold_results:

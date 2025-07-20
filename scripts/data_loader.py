@@ -5,7 +5,6 @@ import pandas as pd
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-import tifffile as tiff
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 from transformers import AutoTokenizer
@@ -31,12 +30,17 @@ class ShopeeDataset(Dataset):
     def __getitem__(self, idx):
         row = self.data.iloc[idx]
 
-        # Load and transform image
+        # Load image as PIL
         image = Image.open(row['image_path']).convert('RGB')
-        if self.transform:
-            image = self.transform(image)
 
-        # Tokenize title text
+        # Convert PIL to numpy for Albumentations
+        image_np = np.array(image)
+
+        if self.transform:
+            augmented = self.transform(image=image_np)
+            image = augmented['image']
+
+        # Tokenize text
         text = row['title']
         encoding = self.tokenizer(
             text,

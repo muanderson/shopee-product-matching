@@ -3,88 +3,48 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import models
+from torchvision.models import vit_b_16, ViT_B_16_Weights
+from transformers import BertModel, BertTokenizer
 
 class Shopeetransformer(nn.Module):
-    """
-    Combined EfficientNet and clinical features model with attention mechanism.
-
-    Args:
-        num_clinical_features (int): Number of clinical features
-        dropout_rate (float): Dropout rate for regularization
-    """
-    def __init__(self, num_clinical_features=3, dropout_rate=0.3):
+    def __init__(self, text_model_name='bert-base-uncased', image_out_dim=512, fusion_out_dim=512, num_classes=11014):
         super().__init__()
 
-        # Initialize and customize EfficientNet backbone
-        self.backbone = models.efficientnet_b0(pretrained=True)
-        original_weight = self.backbone.features[0][0].weight.clone()
-        self.backbone.features[0][0] = nn.Conv2d(1, 32, kernel_size=3, stride=2, padding=1, bias=False)
-        self.backbone.features[0][0].weight.data = original_weight.mean(dim=1, keepdim=True)
+        # Pretrained ViT
+        weights = ViT_B_16_Weights.DEFAULT
+        self.image_encoder = vit_b_16(weights=weights)
+        self.image_encoder.heads = nn.Identity()
+        self.image_proj = nn.Linear(768, image_out_dim)
 
-        # Set up feature extraction
-        for param in self.backbone.parameters():
-            param.requires_grad = False
-        for idx in [6, 7]:
-            for param in self.backbone.features[idx].parameters():
-                param.requires_grad = True
+        # Pretrained BERT
+        self.text_encoder = BertModel.from_pretrained(text_model_name)
+        self.text_proj = nn.Linear(self.text_encoder.config.hidden_size, image_out_dim)
 
-        # Add dimension reduction layers
-        self.dim_reduce = nn.Sequential(
-            nn.Conv2d(1280, 320, 1),
-            nn.BatchNorm2d(320),
-            nn.ReLU(inplace=True)
+        # Fusion + classifier
+        self.classifier = nn.Sequential(
+            nn.Linear(image_out_dim * 2, fusion_out_dim),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(fusion_out_dim, num_classes)
         )
 
-        # Clinical features processing
-        self.clinical_net = nn.Sequential(
-            nn.Linear(num_clinical_features, 16),
-            nn.LayerNorm(16),
-            nn.GELU(),
-            nn.Dropout(dropout_rate)
-        )
+    def forward(self, image, input_ids, attention_mask):
+        # ViT feature extraction
+        vit_outputs = self.image_encoder(image)
+        # Use CLS token embedding (first token)
+        image_feat = vit_outputs.last_hidden_state[:, 0]
+        image_feat = self.image_proj(image_feat)
 
-        # Cross-attention mechanism
-        self.clinical_attention = nn.Sequential(
-            nn.Linear(16, 128),
-            nn.GELU(),
-            nn.Linear(128, 320),
-            nn.Sigmoid()
-        )
+        # BERT feature extraction
+        bert_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+        text_feat = bert_outputs.pooler_output
+        text_feat = self.text_proj(text_feat)
 
-        # Final prediction layers
-        self.final_layers = nn.Sequential(
-            nn.Linear(320 + 16, 512),
-            nn.LayerNorm(512),
-            nn.GELU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(512, 128),
-            nn.LayerNorm(128),
-            nn.GELU(),
-            nn.Dropout(dropout_rate),
-            nn.Linear(128, 1)
-        )
+        # Fuse
+        fused = torch.cat([image_feat, text_feat], dim=1)
 
-        self._initialize_weights()
+        # Classification logits
+        logits = self.classifier(fused)
+        return logits
 
-    def _initialize_weights(self):
-        """Initialize model weights using Kaiming initialization"""
-        for m in self.modules():
-            if isinstance(m, nn.Linear):
-                nn.init.kaiming_normal_(m.weight, a=0.1)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
 
-    def forward(self, image, clinical):
-        """Forward pass combining image and clinical features"""
-        x = self.backbone.features(image)
-        x = self.dim_reduce(x)
-        x = F.adaptive_avg_pool2d(x, (1, 1))
-        image_features = torch.flatten(x, 1)
-
-        clinical_features = self.clinical_net(clinical)
-        attention_weights = self.clinical_attention(clinical_features)
-        attended_image_features = image_features * attention_weights
-
-        combined = torch.cat((attended_image_features, clinical_features), dim=1)
-        return self.final_layers(combined)

@@ -4,36 +4,23 @@ import torch
 import torch.nn as nn
 import numpy as np
 from collections import defaultdict
-from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
+from sklearn.metrics import accuracy_score, f1_score
 
 def train_epoch(model, train_loader, criterion, optimizer, scaler, device):
-    """
-    Train the model for one epoch.
-
-    Args:
-        model (nn.Module): The neural network model
-        train_loader (DataLoader): Training data loader
-        criterion: Loss function
-        optimizer: Optimizer
-        scaler: Gradient scaler for mixed precision training
-        device: Device to train on
-
-    Returns:
-        float: Average training loss for the epoch
-    """
     model.train()
     total_loss = 0
 
     for batch in train_loader:
         images = batch['image'].to(device)
-        clinical = batch['clinical'].to(device)
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
         labels = batch['label'].to(device)
 
         optimizer.zero_grad()
 
-        with torch.amp.autocast('cuda'):
-            outputs = model(images, clinical)
-            loss = criterion(outputs.squeeze(), labels)
+        with torch.cuda.amp.autocast():
+            outputs = model(images, input_ids, attention_mask)
+            loss = criterion(outputs, labels)
 
         scaler.scale(loss).backward()
         scaler.step(optimizer)
@@ -44,73 +31,35 @@ def train_epoch(model, train_loader, criterion, optimizer, scaler, device):
     return total_loss / len(train_loader)
 
 def validate(model, val_loader, criterion, device):
-    """
-    Validate the model on validation data.
-
-    Args:
-        model (nn.Module): The neural network model
-        val_loader (DataLoader): Validation data loader
-        criterion: Loss function
-        device: Device to validate on
-
-    Returns:
-        dict: Dictionary containing validation metrics
-    """
     model.eval()
     total_loss = 0
-    volume_predictions = defaultdict(list)
-    volume_targets = defaultdict(list)
+    all_preds = []
+    all_targets = []
 
     with torch.no_grad():
         for batch in val_loader:
             images = batch['image'].to(device)
-            clinical = batch['clinical'].to(device)
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
             labels = batch['label'].to(device)
-            volume_names = batch['volume_name']
 
-            outputs = model(images, clinical)
-            loss = criterion(outputs.squeeze(), labels)
-
+            outputs = model(images, input_ids, attention_mask)
+            loss = criterion(outputs, labels)
             total_loss += loss.item()
-            batch_preds = outputs.squeeze().cpu().numpy()
-            batch_targets = labels.cpu().numpy()
 
-            for pred, target, vol_name in zip(batch_preds, batch_targets, volume_names):
-                volume_predictions[vol_name].append(pred)
-                volume_targets[vol_name].append(target)
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+            targets = labels.cpu().numpy()
 
-    # Average predictions per volume
-    final_predictions = []
-    final_targets = []
-    for vol_name in volume_predictions:
-        final_predictions.append(np.mean(volume_predictions[vol_name]))
-        final_targets.append(np.mean(volume_targets[vol_name]))
+            all_preds.extend(preds)
+            all_targets.extend(targets)
 
-    final_predictions = np.array(final_predictions)
-    final_targets = np.array(final_targets)
-
-    if len(set(final_targets)) < 2:
-        print("Warning: All targets are identical in validation set")
-        return {
-            'loss': total_loss / len(val_loader),
-            'mae': 0.0,
-            'mse': 0.0,
-            'r2': 0.0
-        }
-
-    mae = mean_absolute_error(final_targets, final_predictions)
-    mse = mean_squared_error(final_targets, final_predictions)
-
-    ss_res = np.sum((final_targets - final_predictions) ** 2)
-    ss_tot = np.sum((final_targets - np.mean(final_targets)) ** 2)
-
-    r2 = 0.0 if ss_tot == 0 else 1 - (ss_res / ss_tot)
+    accuracy = accuracy_score(all_targets, all_preds)
+    f1 = f1_score(all_targets, all_preds, average='weighted')
 
     return {
         'loss': total_loss / len(val_loader),
-        'mae': mae,
-        'mse': mse,
-        'r2': r2
+        'accuracy': accuracy,
+        'f1': f1
     }
 
 def train_model(model, train_loader, val_loader, config):
@@ -126,23 +75,18 @@ def train_model(model, train_loader, val_loader, config):
     Returns:
         tuple: Best validation metrics (MAE, MSE, R²)
     """
-    criterion = nn.HuberLoss(delta=1.0)
+    criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(
         model.parameters(),
-        lr=config['learning_rate'],
-        weight_decay=config['weight_decay']
+        lr=config['learning_rate']
     )
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer,
-        T_0=config['t0'],
-        T_mult=config['t_mult'],
-        eta_min=config['min_lr']
-    )
+        optimizer, T_0 = 10)
     scaler = torch.cuda.amp.GradScaler('cuda')
 
-    best_val_mae = float('inf')
-    best_val_mse = float('inf')
-    best_val_r2 = float('-inf')
+    best_val_acc = float('-inf')
+    best_val_f1 = float('-inf')
+    
     patience_counter = 0
 
     for epoch in range(config['epochs']):
@@ -156,9 +100,8 @@ def train_model(model, train_loader, val_loader, config):
         print(f'Epoch {epoch+1}/{config["epochs"]}:')
         print(f'Train Loss: {train_loss:.4f}')
         print(f'Val Loss: {val_metrics["loss"]:.4f}')
-        print(f'Val MAE: {val_metrics["mae"]:.4f}')
-        print(f'Val MSE: {val_metrics["mse"]:.4f}')
-        print(f'Val R2: {val_metrics["r2"]:.4f}')
+        print(f'Val Accuracy: {val_metrics["accuracy"]:.4f}')
+        print(f'Val F1: {val_metrics["f1"]:.4f}')
         print(f'Learning Rate: {optimizer.param_groups[0]["lr"]:.6f}\n')
 
         # Update best metrics
@@ -169,8 +112,8 @@ def train_model(model, train_loader, val_loader, config):
             patience_counter += 1
             print(f'No improvement in MSE. Patience counter: {patience_counter}/{config["patience"]}')
 
-        if val_metrics['r2'] > best_val_r2:
-            best_val_r2 = val_metrics['r2']
+        if val_metrics['f1'] > best_val_f1:
+            best_val_f1 = val_metrics['f1']
             # Save the model weights
             model_path = os.path.join(
                 config['output_dir'],
@@ -178,8 +121,8 @@ def train_model(model, train_loader, val_loader, config):
             )
             torch.save(model.state_dict(), model_path)
 
-        if val_metrics['mae'] < best_val_mae:
-            best_val_mae = val_metrics['mae']
+        if val_metrics['accuracy'] > best_val_acc:
+            best_val_acc = val_metrics['accuracy']
 
         # Early stopping check
         if patience_counter >= config['patience']:
@@ -187,4 +130,4 @@ def train_model(model, train_loader, val_loader, config):
 
         scheduler.step()
 
-    return best_val_mae, best_val_mse, best_val_r2
+    return best_val_acc, best_val_f1
