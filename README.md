@@ -1,1 +1,105 @@
-# shopee-product-matching
+# Shopee Product Matching - Kaggle Competition
+
+This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search.
+
+**Final Result: Mean F1 Score of 0.589 on the private leaderboard.**
+
+---
+
+### ## 🖼️ Visual Demonstration
+
+The model processes a query product's image and title to find visually and textually similar items from the database. Below is a conceptual example of the model's output.
+
+| Query Product | Match 1 | Match 2 | Match 3 |
+| :---: | :---: | :---: | :---: |
+| ![Query](https://placehold.co/200x200/DBEAFE/3B82F6?text=Query+Item) | ![Match 1](https://placehold.co/200x200/DBEAFE/3B82F6?text=Match+1) | ![Match 2](https://placehold.co/200x200/DBEAFE/3B82F6?text=Match+2) | ![Match 3](https://placehold.co/200x200/DBEAFE/3B82F6?text=Match+3) |
+| *Original Item* | *Confident Match* | *Confident Match* | *Confident Match* |
+
+---
+
+### ## ⚙️ Technical Approach & Methodology
+
+My approach is centered around creating a powerful, combined embedding for each product and then efficiently finding the nearest neighbors in this embedding space.
+
+1.  **Multi-Modal Model Architecture**:
+    * **Image Embeddings**: A pre-trained Vision Transformer (`vit_b_16`) processes product images to capture visual features. The final classification head is removed to extract a 768-dimension feature vector.
+    * **Text Embeddings**: A pre-trained BERT model (`bert-base-uncased`) processes product titles to capture semantic meaning. The `[CLS]` token's output is used as the sentence embedding.
+    * **Fusion**: The image and text feature vectors are projected to a common dimension (512), concatenated, and then passed through a final linear layer to create a single, fused embedding.
+    * **Normalization**: The final embedding is L2-normalized. This is a critical step that projects the vectors onto a hypersphere, making cosine similarity an effective and efficient metric for measuring distance.
+
+2.  **Inference and Candidate Generation**:
+    * The trained model is used to generate a 512-dimension embedding for every product in the test set.
+    * To find potential matches for each product, I used `scikit-learn`'s `NearestNeighbors` model, configured with a `cosine` metric. This allows for a highly optimized search for the top 50 most similar items, avoiding a slow, brute-force comparison.
+
+3.  **Grouping and Thresholding**:
+    * For each product, its 50 nearest neighbors are considered as potential matches.
+    * A **similarity threshold of 0.85** is applied to the cosine similarity scores. Only neighbors with a similarity score *above* this threshold are considered true matches. This step is crucial for balancing the precision and recall of the final groups.
+
+---
+
+### ## 🛠️ Tech Stack
+
+* **Core Libraries**: Python, PyTorch, Hugging Face Transformers
+* **Data Handling**: Pandas, NumPy
+* **ML & Computer Vision**: scikit-learn, Albumentations, Pillow (PIL)
+* **Development**: Jupyter Notebooks (for exploration), Git & GitHub (for version control)
+
+---
+
+### ## 📂 Project Structure
+
+```
+shopee-product-matching/
+├── data/
+│   └── (Download from Kaggle)
+├── notebooks/
+│   └── 1_data_exploration.ipynb
+├── src/
+│   ├── dataset.py
+│   ├── model.py
+│   └── inference.py
+├── .gitignore
+├── README.md
+└── requirements.txt
+```
+
+---
+
+### ## 🚀 Setup and Usage
+
+To reproduce the results, follow these steps:
+
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/](https://github.com/)<muanderson/shopee-product-matching.git
+    cd shopee-product-matching
+    ```
+
+2.  **Create a virtual environment and install dependencies:**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    pip install -r requirements.txt
+    ```
+
+3.  **Download Data and Model Weights:**
+    * Download the competition data from the [Shopee Kaggle page](https://www.kaggle.com/c/shopee-product-matching/data).
+    * Unzip and place the contents into the `data/` directory.
+    * Place the pre-trained model weights (`.pt` or `.bin` files) into a `models/` directory.
+
+4.  **Run Inference:**
+    * Update the file paths in `src/inference.py` to point to your data and model directories.
+    * Execute the script to generate the `submission.csv` file.
+    ```bash
+    python src/inference.py
+    ```
+
+---
+
+### ## 📈 Future Improvements
+
+While the current score is solid, several areas could be explored to further improve performance:
+
+* **Hyperparameter Tuning**: Systematically tune the `similarity_threshold` on a validation set to find the optimal balance between precision and recall.
+* **Graph-Based Grouping**: Implement a more robust grouping strategy by treating matches as a graph. Finding the "connected components" of this graph would ensure that if A matches B and B matches C, then A, B, and C are all correctly placed in the same group.
+* **Fine-Tuning with ArcFace**: Fine-tune the end-to-end model on the Shopee training data using a metric learning loss function like ArcFace. This would train the model to create a more discriminative embedding space, making the final grouping much easier and more accurate.
