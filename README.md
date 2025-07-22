@@ -3,7 +3,7 @@
 This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search.
 
 **Final Result: Mean F1 Score of 0.589 on the private leaderboard.**
-![Results](Screenshot 2025-07-22 175422.png)
+![Results](result.png)
 ---
 
 ### 🖼️ Visual Demonstration
