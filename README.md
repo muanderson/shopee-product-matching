@@ -3,10 +3,10 @@
 This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search.
 
 **Final Result: Mean F1 Score of 0.589 on the private leaderboard.**
-
+![Results](Screenshot 2025-07-22 175422.png)
 ---
 
-### ## 🖼️ Visual Demonstration
+### 🖼️ Visual Demonstration
 
 The model processes a query product's image and title to find visually and textually similar items from the database. Below is a conceptual example of the model's output.
 
@@ -17,7 +17,7 @@ The model processes a query product's image and title to find visually and textu
 
 ---
 
-### ## ⚙️ Technical Approach & Methodology
+### ⚙️ Technical Approach & Methodology
 
 My approach is centered around creating a powerful, combined embedding for each product and then efficiently finding the nearest neighbors in this embedding space.
 
@@ -37,7 +37,7 @@ My approach is centered around creating a powerful, combined embedding for each 
 
 ---
 
-### ## 🛠️ Tech Stack
+### 🛠️ Tech Stack
 
 * **Core Libraries**: Python, PyTorch, Hugging Face Transformers
 * **Data Handling**: Pandas, NumPy
@@ -46,7 +46,7 @@ My approach is centered around creating a powerful, combined embedding for each 
 
 ---
 
-### ## 📂 Project Structure
+### 📂 Project Structure
 
 ```
 shopee-product-matching/
@@ -96,7 +96,7 @@ To reproduce the results, follow these steps:
 
 ---
 
-### ## 📈 Future Improvements
+### 📈 Future Improvements
 
 While the current score is solid, several areas could be explored to further improve performance:
 
