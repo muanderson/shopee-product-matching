@@ -1,14 +1,48 @@
 # Shopee Product Matching - Kaggle Competition
 
-This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search.
+This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search. I used this project to gain further insight into the ML pipeline process as well as transformer architectures and text-based models.
 
-**Final Result: Mean F1 Score of 0.589 on the private leaderboard.**
+**Final Result: Mean F1 Score of 0.577 on the private leaderboard.**
 ![Results](result.png)
 ---
 
-### 🖼️ Visual Demonstration
+### 🖼️ Visualizing the Approach
 
-The model processes a query product's image and title to find visually and textually similar items from the database. Below is a conceptual example of the model's output.
+My solution follows a two-stage process: first, generating a unified embedding from product data using a multi-modal model, and second, using these embeddings to find and group similar items.
+
+#### Model Architecture
+
+The core of the project is a neural network that fuses visual and textual information into a single vector.
+
+```
++--------------------------+      +--------------------------------+
+|      Product Image       |      |          Product Title         |
++--------------------------+      +--------------------------------+
+             |                                   |
+             v                                   v
++--------------------------+      +--------------------------------+
+| Vision Transformer (ViT) |      |         BERT Encoder           |
+|   (Image Embeddings)     |      |       (Text Embeddings)        |
++--------------------------+      +--------------------------------+
+             |                                   |
+             +----------------+------------------+
+                              |
+                              v
+                 +--------------------------+
+                 |  Concatenate & Project   |
+                 |      (Fusion Layer)      |
+                 +--------------------------+
+                              |
+                              v
+                 +--------------------------+
+                 | L2 Normalized Embedding  |
+                 |      (512-dim Vector)    |
+                 +--------------------------+
+```
+
+#### Example Output
+
+The generated embeddings are then used to find the most similar products for any given item.
 
 | Query Product | Match 1 | Match 2 | Match 3 |
 | :---: | :---: | :---: | :---: |
@@ -65,7 +99,7 @@ shopee-product-matching/
 
 ---
 
-### ## 🚀 Setup and Usage
+### 🚀 Setup and Usage
 
 To reproduce the results, follow these steps:
 
