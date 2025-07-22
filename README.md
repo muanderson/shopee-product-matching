@@ -6,7 +6,7 @@ This repository contains my solution for the [Shopee - Product Matching Kaggle C
 ![Results](result.png)
 ---
 
-### 🖼️ Visualizing the Approach
+### 🖼️ Visualising the Approach
 
 My solution follows a two-stage process: first, generating a unified embedding from product data using a multi-modal model, and second, using these embeddings to find and group similar items.
 
@@ -35,7 +35,7 @@ The core of the project is a neural network that fuses visual and textual inform
                               |
                               v
                  +--------------------------+
-                 | L2 Normalized Embedding  |
+                 | L2 Normalised Embedding  |
                  |      (512-dim Vector)    |
                  +--------------------------+
 ```
@@ -59,15 +59,15 @@ My approach is centered around creating a powerful, combined embedding for each 
     * **Image Embeddings**: A pre-trained Vision Transformer (`vit_b_16`) processes product images to capture visual features. The final classification head is removed to extract a 768-dimension feature vector.
     * **Text Embeddings**: A pre-trained BERT model (`bert-base-uncased`) processes product titles to capture semantic meaning. The `[CLS]` token's output is used as the sentence embedding.
     * **Fusion**: The image and text feature vectors are projected to a common dimension (512), concatenated, and then passed through a final linear layer to create a single, fused embedding.
-    * **Normalization**: The final embedding is L2-normalized. This is a critical step that projects the vectors onto a hypersphere, making cosine similarity an effective and efficient metric for measuring distance.
+    * **Normalisation**: The final embedding is L2-normalised. This is a critical step that projects the vectors onto a hypersphere, making cosine similarity an effective and efficient metric for measuring distance.
 
 2.  **Inference and Candidate Generation**:
     * The trained model is used to generate a 512-dimension embedding for every product in the test set.
-    * To find potential matches for each product, I used `scikit-learn`'s `NearestNeighbors` model, configured with a `cosine` metric. This allows for a highly optimized search for the top 50 most similar items, avoiding a slow, brute-force comparison.
+    * To find potential matches for each product, I used `scikit-learn`'s `NearestNeighbors` model, configured with a `cosine` metric. This allows for a highly optimised search for the top 50 most similar items, avoiding a slow, brute-force comparison.
 
 3.  **Grouping and Thresholding**:
     * For each product, its 50 nearest neighbors are considered as potential matches.
-    * A **similarity threshold of 0.85** is applied to the cosine similarity scores. Only neighbors with a similarity score *above* this threshold are considered true matches. This step is crucial for balancing the precision and recall of the final groups.
+    * A **similarity threshold of 0.85** is applied to the cosine similarity scores. Only neighbors with a similarity score *above* this threshold are considered true matches. This step is crucial for balancing the precision and recall of the final groups. Note: this could likely be further optimised with more experimentation to find an optimal similarity threshold, which could be lower or higher than the value used.
 
 ---
 
