@@ -23,6 +23,8 @@ class ShopeeDataset(Dataset):
         self.transform = transform
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
         self.max_length = max_length
+        # Check if labels are available
+        self.has_labels = 'label' in self.data.columns
 
     def __len__(self):
         return len(self.data)
@@ -50,8 +52,13 @@ class ShopeeDataset(Dataset):
             return_tensors='pt'
         )
 
-        label = torch.tensor(row['label'], dtype=torch.long)
-
+        # Conditionally get the label
+        if self.has_labels:
+            label = torch.tensor(row['label'], dtype=torch.long)
+        else:
+            # For test data, provide a dummy placeholder
+            label = torch.tensor(-1, dtype=torch.long)
+            
         return {
             'image': image,
             'input_ids': encoding['input_ids'].squeeze(0),
@@ -59,7 +66,7 @@ class ShopeeDataset(Dataset):
             'label': label
         }
     
-def get_transforms(image_size=256, is_training=False):
+def get_transforms(image_size=224, is_training=False):
     if is_training:
         return A.Compose([
             A.Rotate(

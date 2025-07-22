@@ -7,45 +7,62 @@ from torchvision.models import vit_b_16, ViT_B_16_Weights
 from transformers import BertModel, BertTokenizer
 
 class Shopeetransformer(nn.Module):
-    def __init__(self, text_model_name='bert-base-uncased', image_out_dim=512, fusion_out_dim=512, num_classes=11014):
+    def __init__(self, text_model_name='bert-base-uncased', embed_dim=512):
         super().__init__()
 
-        # Pretrained ViT
+        # Vision Transformer
         weights = ViT_B_16_Weights.DEFAULT
         self.image_encoder = vit_b_16(weights=weights)
         self.image_encoder.heads = nn.Identity()
-        self.image_proj = nn.Linear(768, image_out_dim)
+        self.image_proj = nn.Linear(768, embed_dim)
 
-        # Pretrained BERT
+        # BERT
         self.text_encoder = BertModel.from_pretrained(text_model_name)
-        self.text_proj = nn.Linear(self.text_encoder.config.hidden_size, image_out_dim)
+        self.text_proj = nn.Linear(self.text_encoder.config.hidden_size, embed_dim)
 
-        # Fusion + classifier
-        self.classifier = nn.Sequential(
-            nn.Linear(image_out_dim * 2, fusion_out_dim),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(fusion_out_dim, num_classes)
-        )
+        # Final projection
+        self.fusion_proj = nn.Linear(embed_dim * 2, embed_dim)
+
+        # Initially freeze both encoders
+        self.freeze_backbones()
+
+    def freeze_backbones(self):
+        for param in self.image_encoder.parameters():
+            param.requires_grad = False
+        for param in self.text_encoder.parameters():
+            param.requires_grad = False
+
+    def unfreeze_backbones(self, unfreeze_bert_layers=2, unfreeze_vit_layers=2):
+        # Unfreeze last N BERT encoder layers
+        for name, param in self.text_encoder.named_parameters():
+            if any(f'encoder.layer.{i}' in name for i in range(12 - unfreeze_bert_layers, 12)):
+                param.requires_grad = True
+
+        # Unfreeze last N ViT encoder layers
+        for i in range(12 - unfreeze_vit_layers, 12):
+            for param in self.image_encoder.encoder.layers[i].parameters():
+                param.requires_grad = True
 
     def forward(self, image, input_ids, attention_mask):
-        # ViT feature extraction
-        vit_outputs = self.image_encoder(image)
-        # Use CLS token embedding (first token)
-        # The output of vit_b_16 with heads=nn.Identity() is directly the feature vector
-        image_feat = vit_outputs
-        image_feat = self.image_proj(image_feat)
+        # Image encoding
+        image_feat = self.image_encoder(image)  # [B, 768]
+        image_feat = self.image_proj(image_feat)  # [B, embed_dim]
 
-        # BERT feature extraction
-        bert_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
-        text_feat = bert_outputs.pooler_output
-        text_feat = self.text_proj(text_feat)
+        # Text encoding
+        text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
+        
+        # --- UPDATED LINE ---
+        # Use the [CLS] token from the last_hidden_state for a better sentence embedding
+        text_feat = text_outputs.last_hidden_state[:, 0]
+        # --------------------
+        
+        text_feat = self.text_proj(text_feat)  # [B, embed_dim]
 
-        # Fuse
-        fused = torch.cat([image_feat, text_feat], dim=1)
+        # Concatenate & fuse
+        fused = torch.cat([image_feat, text_feat], dim=1)  # [B, 2*embed_dim]
+        fused = self.fusion_proj(fused)  # [B, embed_dim]
 
-        # Classification logits
-        logits = self.classifier(fused)
-        return logits
+        # L2 normalisation for metric learning
+        fused = F.normalize(fused, p=2, dim=1)
 
-
+        return fused

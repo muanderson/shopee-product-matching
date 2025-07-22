@@ -7,20 +7,13 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from sklearn.model_selection import KFold
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import Pipeline
 
 from data_loader import ShopeeDataset, get_transforms
 from model import Shopeetransformer
+
 from engine import train_model
 
 def seed_everything(seed=42):
-    """
-    Set random seeds for reproducibility across numpy, torch, and CUDA.
-
-    Args:
-        seed (int): Random seed value, defaults to 42
-    """
     os.environ['PYTHONHASHSEED'] = str(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -28,87 +21,72 @@ def seed_everything(seed=42):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-
 def main():
-    """
-    Main training pipeline orchestrating the entire training process.
-    Handles data loading, preprocessing, model training, and cross-validation.
-    """
-
-    # Set random seed
     seed_everything()
 
-    # Configuration dictionary from command line arguments
     config = {
-        # Paths
-        'output_dir': r'C:\Users\Matthew\Documents\PhD\shopee-product-matching',
+        # Directories
+        'output_dir': r'C:\Users\Matthew\Documents\PhD\shopee-product-matching\models',
         'image_dir': r'C:\Users\Matthew\Documents\PhD\shopee-product-matching\data\train_images',
         'tabular_data_path': r'C:\Users\Matthew\Documents\PhD\shopee-product-matching\data\train.csv',
 
-        # Training parameters
-        'image_size': 256,
-        'batch_size': 32,
-        'learning_rate': 0.001,
-        'min_lr': 1e-6,
+        # Variables
+        'image_size': 224,
+        'batch_size': 64,
+        'learning_rate': 5e-4,
         'epochs': 100,
         'patience': 10,
         'device': torch.device("cuda:0" if torch.cuda.is_available() else "cpu"),
         'n_splits': 5,
+        'use_amp': True,
+
+        # Staged unfreezing config
+        'unfreeze_epoch': 7,
+        'unfreeze_bert_layers': 2,
+        'unfreeze_vit_layers': 2,
+        
+        # Embedding dimension for the model and ArcFace loss
+        'embedding_size': 512,
     }
 
-    # Create output directory if it doesn't exist
     os.makedirs(config['output_dir'], exist_ok=True)
 
-    # Load and preprocess clinical data
     product_data = pd.read_csv(config['tabular_data_path'])
-
-    # Image directory
     image_dir = config['image_dir']
 
-    # Find images linked to multiple labels
     ambiguous_images = product_data.groupby('image')['label_group'].nunique()
     ambiguous_images = ambiguous_images[ambiguous_images > 1].index
 
-    # Find titles linked to multiple labels
     ambiguous_titles = product_data.groupby('title')['label_group'].nunique()
     ambiguous_titles = ambiguous_titles[ambiguous_titles > 1].index
 
-    # Flag ambiguous samples
     product_data['ambiguous'] = product_data['image'].isin(ambiguous_images) | product_data['title'].isin(ambiguous_titles)
+    product_clean = product_data[~product_data['ambiguous']].copy()
 
-    # Separate ambiguous and clean data
-    product_ambiguous = product_data[product_data['ambiguous']]
-    product_clean = product_data[~product_data['ambiguous']]
-
-    # Create mapping from label_group to label_id
-    label_map = {label: idx for idx, label in enumerate(product_clean['label_group'].unique())}
+    unique_label_groups = product_clean['label_group'].unique()
+    label_map = {label: idx for idx, label in enumerate(unique_label_groups)}
     product_clean['label'] = product_clean['label_group'].map(label_map)
-
-    # Verify image paths
     product_clean['image_path'] = product_clean['image'].apply(lambda x: os.path.join(image_dir, x))
 
-    # Setup cross-validation
+    num_classes = product_clean['label'].nunique()
+
     kfold = KFold(n_splits=config['n_splits'], shuffle=True, random_state=42)
     fold_results = []
 
-    X = product_clean.index  # or even just np.arange(len(product_clean))
+    X = product_clean.index
     y = product_clean['label']
 
-    # Cross-validation loop
     for fold, (train_idx, val_idx) in enumerate(kfold.split(X, y)):
         config['fold'] = fold
         print(f'\nTraining Fold {fold + 1}/{config["n_splits"]}')
 
-        # Split data for current fold
         train_data = product_clean.iloc[train_idx].reset_index(drop=True)
         val_data = product_clean.iloc[val_idx].reset_index(drop=True)
 
-        # Create datasets and dataloaders
         train_dataset = ShopeeDataset(
             train_data,
             transform=get_transforms(config['image_size'], is_training=True)
         )
-
         val_dataset = ShopeeDataset(
             val_data,
             transform=get_transforms(config['image_size'], is_training=False)
@@ -118,34 +96,41 @@ def main():
             train_dataset,
             batch_size=config['batch_size'],
             shuffle=True,
-            pin_memory=True if torch.cuda.is_available() else False
+            num_workers=2,
+            pin_memory=torch.cuda.is_available()
         )
-
         val_loader = DataLoader(
             val_dataset,
             batch_size=config['batch_size'],
             shuffle=False,
-            pin_memory=True if torch.cuda.is_available() else False
+            num_workers=2,
+            pin_memory=torch.cuda.is_available()
         )
 
-        # Initialize and train model
-        model = Shopeetransformer()
+        # Pass the embedding size to the model
+        model = Shopeetransformer(embed_dim=config['embedding_size'])
         model = model.to(config['device'])
-        
-        best_acc, best_f1 = train_model(model, train_loader, val_loader, config)
 
-        print(f'Fold {fold + 1}, Best Accuracy: {best_acc:.4f}, Best F1: {best_f1:.4f}')
-        fold_results.append((best_acc, best_f1))
+        # --- UPDATED FUNCTION CALL ---
+        best_r1, best_r5, best_f1 = train_model(
+            model, 
+            train_loader, 
+            val_loader, 
+            config, 
+            num_classes, 
+            config['embedding_size']
+        )
 
-    # Print cross-validation results
+        print(f'Fold {fold + 1}, Best Recall@1: {best_r1:.4f}, Best Recall@5: {best_r5:.4f}, Best MeanF1: {best_f1:.4f}')
+        fold_results.append((best_r1, best_r5))
+
     if fold_results:
-        avg_mae = sum(result[0] for result in fold_results) / len(fold_results)
-        avg_mse = sum(result[1] for result in fold_results) / len(fold_results)
-        avg_r2 = sum(result[2] for result in fold_results) / len(fold_results)
+        avg_r1 = sum(r[0] for r in fold_results) / len(fold_results)
+        avg_r5 = sum(r[1] for r in fold_results) / len(fold_results)
         print('\n=== Cross-Validation Results ===')
-        for i, (mae, mse, r2) in enumerate(fold_results, 1):
-            print(f'Fold {i}: MAE={mae:.4f}, MSE={mse:.4f}, R²={r2:.4f}')
-        print(f'Average MAE: {avg_mae:.4f}, Average MSE: {avg_mse:.4f}, Average R²: {avg_r2:.4f}')
+        for i, (r1, r5) in enumerate(fold_results, 1):
+            print(f'Fold {i}: Recall@1={r1:.4f}, Recall@5={r5:.4f}')
+        print(f'Average Recall@1: {avg_r1:.4f}, Average Recall@5: {avg_r5:.4f}')
     else:
         print("No folds were completed successfully.")
 
