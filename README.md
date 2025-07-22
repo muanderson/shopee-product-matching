@@ -6,7 +6,7 @@ This repository contains my solution for the [Shopee - Product Matching Kaggle C
 
 ---
 
-### ## 🖼️ Visual Demonstration
+### 🖼️ Visual Demonstration
 
 The model processes a query product's image and title to find visually and textually similar items from the database. Below is a conceptual example of the model's output.
 
@@ -17,7 +17,7 @@ The model processes a query product's image and title to find visually and textu
 
 ---
 
-### ## ⚙️ Technical Approach & Methodology
+### ⚙️ Technical Approach & Methodology
 
 My approach is centered around creating a powerful, combined embedding for each product and then efficiently finding the nearest neighbors in this embedding space.
 
@@ -37,7 +37,7 @@ My approach is centered around creating a powerful, combined embedding for each 
 
 ---
 
-### ## 🛠️ Tech Stack
+### 🛠️ Tech Stack
 
 * **Core Libraries**: Python, PyTorch, Hugging Face Transformers
 * **Data Handling**: Pandas, NumPy
@@ -46,7 +46,7 @@ My approach is centered around creating a powerful, combined embedding for each 
 
 ---
 
-### ## 📂 Project Structure
+### 📂 Project Structure
 
 ```
 shopee-product-matching/
