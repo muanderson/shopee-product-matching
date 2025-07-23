@@ -86,11 +86,13 @@ shopee-product-matching/
 ├── data/
 │   └── (Download from Kaggle)
 ├── notebooks/
-│   └── 1_data_exploration.ipynb
+│   └── investigate.ipynb
+│   └── submission.ipynb
 ├── src/
-│   ├── dataset.py
+│   ├── data_loader.py
 │   ├── model.py
-│   └── inference.py
+│   └── engine.py
+│   └── train.py
 ├── .gitignore
 ├── README.md
 └── requirements.txt
