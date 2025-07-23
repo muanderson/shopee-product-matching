@@ -42,13 +42,12 @@ The core of the project is a neural network that fuses visual and textual inform
 
 #### Example Output
 
-The generated embeddings are then used to find the most similar products for any given item.
+The model generates L2-normalised embeddings for products. Similarity between products is measured by cosine similarity of these embeddings to find the closest matches.
 
 | Query Product | Match 1 | Match 2 | Match 3 |
 | :---: | :---: | :---: | :---: |
 | ![Query](https://placehold.co/200x200/DBEAFE/3B82F6?text=Query+Item) | ![Match 1](https://placehold.co/200x200/DBEAFE/3B82F6?text=Match+1) | ![Match 2](https://placehold.co/200x200/DBEAFE/3B82F6?text=Match+2) | ![Match 3](https://placehold.co/200x200/DBEAFE/3B82F6?text=Match+3) |
-| *Original Item* | *Confident Match* | *Confident Match* | *Confident Match* |
-
+| *Original Item* | *Top Similar Match* | *Top Similar Match* | *Top Similar Match* |
 ---
 
 ### ⚙️ Technical Approach & Methodology
