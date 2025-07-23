@@ -2,7 +2,6 @@
 
 import torch
 import torch.nn.functional as F
-# CHANGED: Import ArcFaceLoss instead of TripletMarginLoss
 from pytorch_metric_learning.losses import ArcFaceLoss
 from sklearn.metrics import pairwise_distances, f1_score
 import numpy as np
@@ -12,7 +11,6 @@ def recall_at_k(embeddings, labels, k=1):
     embeddings = embeddings.cpu().numpy()
     labels = labels.cpu().numpy()
     dists = pairwise_distances(embeddings, embeddings, metric='cosine')
-    # Exclude self by starting from the 1st nearest neighbour
     indices = np.argsort(dists, axis=1)[:, 1:k+1]
 
     correct = 0
@@ -21,7 +19,6 @@ def recall_at_k(embeddings, labels, k=1):
             correct += 1
     return correct / len(labels)
 
-# CHANGED: Removed the 'miner' argument
 def train_epoch(model, train_loader, criterion, optimizer, scaler, device):
     model.train()
     total_loss = 0
@@ -36,7 +33,6 @@ def train_epoch(model, train_loader, criterion, optimizer, scaler, device):
 
         with torch.amp.autocast(device_type=device.type):
             embeddings = model(images, input_ids, attention_mask)
-            # CHANGED: ArcFaceLoss does not need a miner
             loss = criterion(embeddings, labels)
 
         scaler.scale(loss).backward()
@@ -81,7 +77,6 @@ def validate(model, val_loader, device):
 
     return {'recall@1': r1, 'recall@5': r5, 'mean_f1': mean_f1}
 
-# CHANGED: Added num_classes and embedding_size to function signature
 def train_model(model, train_loader, val_loader, config, num_classes, embedding_size):
     device = torch.device(config['device'])
     model.to(device)
@@ -115,8 +110,7 @@ def train_model(model, train_loader, val_loader, config, num_classes, embedding_
                 unfreeze_bert_layers=config.get('unfreeze_bert_layers', 2),
                 unfreeze_vit_layers=config.get('unfreeze_vit_layers', 2)
             )
-        
-        # CHANGED: Removed miner from function call
+
         train_loss = train_epoch(model, train_loader, criterion, optimizer, scaler, device)
         val_metrics = validate(model, val_loader, device)
 
