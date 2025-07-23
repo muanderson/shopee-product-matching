@@ -51,7 +51,6 @@ class Shopeetransformer(nn.Module):
         # Text encoding
         text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask)
         
-        # --- UPDATED LINE ---
         # Use the [CLS] token from the last_hidden_state for a better sentence embedding
         text_feat = text_outputs.last_hidden_state[:, 0]
         # --------------------
