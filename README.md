@@ -1,14 +1,48 @@
 # Shopee Product Matching - Kaggle Competition
 
-This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search.
+This repository contains my solution for the [Shopee - Product Matching Kaggle Competition](https://www.kaggle.com/c/shopee-product-matching). The primary goal was to identify which products in a massive dataset were duplicates of each other, using only product titles and images. This project demonstrates a complete machine learning pipeline, from multi-modal deep learning to efficient similarity search. I used this project to gain further insight into the ML pipeline process as well as transformer architectures and text-based models.
 
-**Final Result: Mean F1 Score of 0.589 on the private leaderboard.**
-
+**Final Result: Mean F1 Score of 0.577 on the private leaderboard.**
+![Results](result.png)
 ---
 
 ### 🖼️ Visual Demonstration
 
-The model processes a query product's image and title to find visually and textually similar items from the database. Below is a conceptual example of the model's output.
+My solution follows a two-stage process: first, generating a unified embedding from product data using a multi-modal model, and second, using these embeddings to find and group similar items.
+
+#### Model Architecture
+
+The core of the project is a neural network that fuses visual and textual information into a single vector.
+
+```
++--------------------------+      +--------------------------------+
+|      Product Image       |      |          Product Title         |
++--------------------------+      +--------------------------------+
+             |                                   |
+             v                                   v
++--------------------------+      +--------------------------------+
+| Vision Transformer (ViT) |      |         BERT Encoder           |
+|   (Image Embeddings)     |      |       (Text Embeddings)        |
++--------------------------+      +--------------------------------+
+             |                                   |
+             +----------------+------------------+
+                              |
+                              v
+                 +--------------------------+
+                 |  Concatenate & Project   |
+                 |      (Fusion Layer)      |
+                 +--------------------------+
+                              |
+                              v
+                 +--------------------------+
+                 | L2 Normalised Embedding  |
+                 |      (512-dim Vector)    |
+                 +--------------------------+
+```
+
+#### Example Output
+
+The generated embeddings are then used to find the most similar products for any given item.
 
 | Query Product | Match 1 | Match 2 | Match 3 |
 | :---: | :---: | :---: | :---: |
@@ -25,15 +59,15 @@ My approach is centered around creating a powerful, combined embedding for each 
     * **Image Embeddings**: A pre-trained Vision Transformer (`vit_b_16`) processes product images to capture visual features. The final classification head is removed to extract a 768-dimension feature vector.
     * **Text Embeddings**: A pre-trained BERT model (`bert-base-uncased`) processes product titles to capture semantic meaning. The `[CLS]` token's output is used as the sentence embedding.
     * **Fusion**: The image and text feature vectors are projected to a common dimension (512), concatenated, and then passed through a final linear layer to create a single, fused embedding.
-    * **Normalization**: The final embedding is L2-normalized. This is a critical step that projects the vectors onto a hypersphere, making cosine similarity an effective and efficient metric for measuring distance.
+    * **Normalisation**: The final embedding is L2-normalised. This is a critical step that projects the vectors onto a hypersphere, making cosine similarity an effective and efficient metric for measuring distance.
 
 2.  **Inference and Candidate Generation**:
     * The trained model is used to generate a 512-dimension embedding for every product in the test set.
-    * To find potential matches for each product, I used `scikit-learn`'s `NearestNeighbors` model, configured with a `cosine` metric. This allows for a highly optimized search for the top 50 most similar items, avoiding a slow, brute-force comparison.
+    * To find potential matches for each product, I used `scikit-learn`'s `NearestNeighbors` model, configured with a `cosine` metric. This allows for a highly optimised search for the top 50 most similar items, avoiding a slow, brute-force comparison.
 
 3.  **Grouping and Thresholding**:
     * For each product, its 50 nearest neighbors are considered as potential matches.
-    * A **similarity threshold of 0.85** is applied to the cosine similarity scores. Only neighbors with a similarity score *above* this threshold are considered true matches. This step is crucial for balancing the precision and recall of the final groups.
+    * A **similarity threshold of 0.85** is applied to the cosine similarity scores. Only neighbors with a similarity score *above* this threshold are considered true matches. This step is crucial for balancing the precision and recall of the final groups. Note: this could likely be further optimised with more experimentation to find an optimal similarity threshold, which could be lower or higher than the value used.
 
 ---
 
@@ -65,7 +99,7 @@ shopee-product-matching/
 
 ---
 
-### ## 🚀 Setup and Usage
+### 🚀 Setup and Usage
 
 To reproduce the results, follow these steps:
 
@@ -96,7 +130,7 @@ To reproduce the results, follow these steps:
 
 ---
 
-### ## 📈 Future Improvements
+### 📈 Future Improvements
 
 While the current score is solid, several areas could be explored to further improve performance:
 

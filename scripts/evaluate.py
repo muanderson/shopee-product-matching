@@ -27,13 +27,11 @@ def get_embeddings(model, data_loader, device):
 def find_matches(df, embeddings, k_neighbors=50, similarity_threshold=0.85):
     """Finds matching products based on embedding similarity."""
     
-    # --- ADDED ---
     # Dynamically adjust k to be no more than the number of samples
     num_samples = len(embeddings)
     if k_neighbors > num_samples:
         print(f"Warning: k_neighbors ({k_neighbors}) is greater than number of samples ({num_samples}). Adjusting to {num_samples}.")
         k_neighbors = num_samples
-    # -------------
 
     # Using sklearn's NearestNeighbors for cosine distance
     nn_model = NearestNeighbors(n_neighbors=k_neighbors, metric='cosine', n_jobs=-1)
@@ -86,12 +84,12 @@ def main():
     # --- 2. Prepare Data ---
     print("Preparing test data...")
     df_test = pd.read_csv(config['tabular_data_path'])
+    
     # Add image_path column
     df_test['image_path'] = df_test['image'].apply(
         lambda x: os.path.join(config['image_dir'], x)
     )
     
-    # The test dataset from ShopeeDataset doesn't need labels
     test_dataset = ShopeeDataset(
         df_test, 
         transform=get_transforms(config['image_size'], is_training=False)
