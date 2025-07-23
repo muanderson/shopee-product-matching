@@ -88,7 +88,7 @@ shopee-product-matching/
 ├── notebooks/
 │   └── investigate.ipynb
 │   └── submission.ipynb
-├── src/
+├── scripts/
 │   ├── data_loader.py
 │   ├── model.py
 │   └── engine.py
