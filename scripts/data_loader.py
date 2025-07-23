@@ -70,9 +70,9 @@ def get_transforms(image_size=224, is_training=False):
     if is_training:
         return A.Compose([
             A.Rotate(
-                limit=(11),  # Degrees
+                limit=(11),
                 p=0.8,
-                border_mode=0  # cv2.BORDER_CONSTANT
+                border_mode=0 
             ),
             A.HorizontalFlip(p=0.5),
             A.Normalize(mean=0.5, std=0.5),
