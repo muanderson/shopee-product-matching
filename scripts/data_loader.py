@@ -35,6 +35,11 @@ class ShopeeDataset(Dataset):
         # Load image as PIL
         image = Image.open(row['image_path']).convert('RGB')
 
+        width, height = image.size
+
+        if width or height != 224:
+            image = image.resize((224, 224), resample=Image.LANCZOS)
+
         # Convert PIL to numpy for Albumentations
         image_np = np.array(image)
 
